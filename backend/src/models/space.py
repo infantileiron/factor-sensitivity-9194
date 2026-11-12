@@ -7,3 +7,5 @@ class FactorSpace(RecordMixin,Base):
  name:Mapped[str]=mapped_column(String(180),unique=True)
  model_id:Mapped[str]=mapped_column(ForeignKey("response_models.id"))
  description:Mapped[str]=mapped_column(Text,default="")
+ source_space_id:Mapped[str|None]=mapped_column(ForeignKey("spaces.id"),nullable=True)
+ migration:Mapped[dict]=mapped_column(JSON,default=dict)

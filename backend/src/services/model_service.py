@@ -8,7 +8,7 @@ from ..models.common import serialize
 from .polynomial import validate_model
 from .csv_data import records
 def specification(db,row):
- return {'intercept':row.intercept,'response_unit':row.response_unit,'factors':[{k:getattr(f,k) for k in ['factor_id','name','unit','linear','quadratic']} for f in db.scalars(select(ModelFactor).where(ModelFactor.model_id==row.id).order_by(ModelFactor.created_at,ModelFactor.id)).all()],'interactions':[{k:getattr(f,k) for k in ['left','right','coefficient']} for f in db.scalars(select(ModelInteraction).where(ModelInteraction.model_id==row.id).order_by(ModelInteraction.id)).all()]}
+ return {'intercept':row.intercept,'response_unit':row.response_unit,'factors':[{k:getattr(f,k) for k in ['factor_id','name','unit','linear','quadratic']} for f in db.scalars(select(ModelFactor).where(ModelFactor.model_id==row.id).order_by(ModelFactor.factor_id)).all()],'interactions':[{k:getattr(f,k) for k in ['left','right','coefficient']} for f in db.scalars(select(ModelInteraction).where(ModelInteraction.model_id==row.id).order_by(ModelInteraction.id)).all()]}
 def expanded(db,row):return {**serialize(row),**specification(db,row)}
 def create(db,body):
  try:

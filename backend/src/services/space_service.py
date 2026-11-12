@@ -4,11 +4,18 @@ from fastapi import HTTPException
 from ..models.space import FactorSpace
 from ..models.response_model import ResponseModel
 from ..models.factor_range import FactorRange
+from ..models.model_factor import ModelFactor
 from ..models.common import serialize
 from .model_service import specification
 from .polynomial import validate_ranges
 from .csv_data import records
-def ranges(db,row):return [{k:getattr(f,k) for k in ['factor_id','low','high']} for f in db.scalars(select(FactorRange).where(FactorRange.space_id==row.id)).all()]
+def ranges(db,row):
+ # Deterministic, database-independent ordering by factor_id; the same key
+ # orders the model specification and interaction lookups, so physical ranges
+ # are never matched to factors by implicit storage/timestamp order.
+ ids=db.scalars(select(ModelFactor.factor_id).where(ModelFactor.model_id==row.model_id).order_by(ModelFactor.factor_id)).all()
+ rows={f.factor_id:f for f in db.scalars(select(FactorRange).where(FactorRange.space_id==row.id)).all()}
+ return [{k:getattr(rows[ident],k) for k in ['factor_id','low','high']} for ident in ids if ident in rows]
 def expanded(db,row):return {**serialize(row),'ranges':ranges(db,row)}
 def create(db,body):
  model=db.get(ResponseModel,body.model_id)

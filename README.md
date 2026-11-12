@@ -46,6 +46,19 @@
 
 范围CSV列为 `factor_id,low,high`；必须完整覆盖对应模型且不重复，端点有限、绝对值≤10000，low<high。不自动推断单位、不执行单位转换。归一映射是 `x=low+u*(high-low)`，u∈[0,1]。所有因子被假设为独立均匀分布；相关输入需要别的方法，不能直接把本结果推广过去。
 
+## 单位迁移（仿射换算）
+
+研究组更换物理单位时，禁止手抄系数——交互项最易漏改。响应模型页提供单位迁移面板，对勾选因子声明仿射关系 `x_new = scale × x_old + offset`：`scale` 为正比例缩放（必须>0），`offset` 为平移；未勾选因子保持恒等换算。系统把旧坐标 `x_old=(x_new-offset)/scale` 代回原多项式并重新归集，自动重算每一类系数，无需人工录入：
+
+- 二次项 `q'_i = q_i / s_i²`；交互项 `γ'_ij = γ_ij / (s_i s_j)`（含与未迁移因子的交互，交互项不会被漏掉）
+- 线性项 `c'_i = c_i/s_i − 2q_i o_i/s_i² − Σ_j γ_ij o_j/(s_i s_j)`
+- 截距 `b' = b − Σc_i o_i/s_i + Σq_i o_i²/s_i² + Σγ_ij o_i o_j/(s_i s_j)`
+- 物理范围 `low'/high' = s×low/high + offset`（s>0 保证正宽不翻转）
+
+换算结果先经「试算」返回新旧截距、线性/二次/交互系数与范围端点的并排核对，不写库；确认后在**单事务**内建立全新的模型版本与因子空间版本，并保存换算台账（来源ID、各因子s/o、新旧对照）。任何一步校验失败（零/负比例、未知或重复因子、非有限值、新系数或范围超出既有1e6/1e12/1e4限值、名称冲突）整批回滚，不产生半成品。
+
+迁移是版本新增而非原地修改：旧模型、旧空间、旧研究、已完成运行、复核与归档报告（含其JSON快照和SHA256）全部保持原值，历史数据继续兼容。新版模型可建立新研究；在同一归一工况u下，新旧物理点经各自范围映射后响应完全相同，Morris的μ/μ*/σ与Sobol的S1/ST逐因子一致（数值误差仅为float64舍入），因为变量仿射替换不改变均匀分布的归一采样结构。权限与建模一致：分析师/管理员可发起迁移，viewer只读（但可调用试算接口核对）。
+
 ## 两个Python算法
 
 ### Morris网格轨迹
@@ -106,7 +119,7 @@ docker compose down -v --remove-orphans
 |存储/任务|MySQL8.4（验收8.4.11）、Redis7.4列表队列|
 |容器|frontend/Nginx1.28、backend、worker、db、redis，恰好五服务|
 
-`backend/src/{models,schemas,services,controllers,routes}`贯穿六聚合；`middlewares`处理审计与全局错误，`utils`处理JWT/PBKDF2/队列；`backend/scripts/seed_demo.py`负责自然键幂等seed。`backend/migrations`记录新库初始化方式；已有生产库需单独审查增量迁移。
+`backend/src/{models,schemas,services,controllers,routes}`贯穿六聚合；`middlewares`处理审计与全局错误，`utils`处理JWT/PBKDF2/队列；`backend/scripts/seed_demo.py`负责自然键幂等seed。`backend/migrations`记录新库初始化方式；已有生产库需单独审查增量迁移（`002_unit_migration.sql`为单位迁移溯源字段）。仿射换算纯函数在`services/unit_migration.py`，落库编排在`services/migration_service.py`，路由前缀`/unit-migrations`（`/preview`试算、根路径确认建版）；`backend/tests`为换算数学、整批拒绝、服务/API与全链路敏感度等价测试，用SQLite内存库运行`python -m pytest tests`。
 
 `frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}`拆分职责。所有模型计算、业务校验与持久化在Python，前端仅作输入、选择和绘制真实结果。
 
